@@ -34,6 +34,7 @@ from models.convmixer import ConvMixer
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=1e-4, type=float, help='learning rate') # resnets.. 1e-3, Vit..1e-4
 parser.add_argument('--opt', default="adam")
+parser.add_argument('--starting_epoch', type=int, default='0')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--noaug', action='store_true', help='disable use randomaug')
 parser.add_argument('--noamp', action='store_true', help='disable mixed precision training. for older pytorch versions')
@@ -192,6 +193,19 @@ elif args.net=="vit":
     dropout = 0.1,
     emb_dropout = 0.1
 )
+elif args.net=="vit_tacl":
+    from models.vit_tacl import ViT
+    net = ViT(
+    image_size = size,
+    patch_size = args.patch,
+    num_classes = 10,
+    dim = int(args.dimhead),
+    depth = 6,
+    heads = 8,
+    mlp_dim = 512,
+    dropout = 0.1,
+    emb_dropout = 0.1
+)
 elif args.net=="vit_timm":
     import timm
     net = timm.create_model("vit_base_patch16_384", pretrained=True)
@@ -239,15 +253,6 @@ if 'cuda' in device:
     net = torch.nn.DataParallel(net) # make parallel
     cudnn.benchmark = True
 
-if args.resume:
-    # Load checkpoint.
-    print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/{}-ckpt.t7'.format(args.net))
-    net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
-
 # Loss is CE
 criterion = nn.CrossEntropyLoss()
 
@@ -259,8 +264,26 @@ elif args.opt == "sgd":
 # use cosine scheduling
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs)
 
-##### Training
+# scaler
 scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+
+# restore checkpoint
+if args.resume:
+    # Load checkpoint.
+    print('==> Resuming from checkpoint..')
+    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load('./checkpoint/'+args.net+'-{}-ckpt.t7'.format(args.patch))
+    net.load_state_dict(checkpoint['model'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    scaler.load_state_dict(checkpoint['scaler'])
+    #best_acc = checkpoint['acc']
+    # Epoch key is broken, use arg-specified starting epoch instead.
+    #start_epoch = checkpoint['epoch']
+    start_epoch = args.starting_epoch
+elif args.starting_epoch != 0:
+    raise ValueError("Training from scratch, but got non-zero starting_epoch. Only use this argument when resuming from checkpoint!")
+
+##### Training
 def train(epoch):
     print('\nEpoch: %d' % epoch)
     net.train()
