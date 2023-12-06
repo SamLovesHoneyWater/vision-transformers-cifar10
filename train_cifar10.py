@@ -142,6 +142,19 @@ elif args.net=="vit_small":
     dropout = 0.1,
     emb_dropout = 0.1
 )
+elif args.net=="vit_small_tacl":
+    from models.vit_small_tacl import ViT
+    net = ViT(
+    image_size = size,
+    patch_size = args.patch,
+    num_classes = 10,
+    dim = int(args.dimhead),
+    depth = 6,
+    heads = 8,
+    mlp_dim = 512,
+    dropout = 0.1,
+    emb_dropout = 0.1
+)
 elif args.net=="vit_tiny":
     from models.vit_small import ViT
     net = ViT(
